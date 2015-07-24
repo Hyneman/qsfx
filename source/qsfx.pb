@@ -40,10 +40,38 @@ EnableExplicit
 #QSFX_VERSION_MAJOR = 0
 #QSFX_VERSION_MINOR = 1
 
+CompilerIf #PB_Compiler_ExecutableFormat = #PB_Compiler_DLL
+	#QSFX_LIBRARY = #True
+CompilerElse
+	#QSFX_LIBRARY = #False
+CompilerEndIf
+
+CompilerIf Not Defined(QSFX_DEBUG, #PB_Constant)
+	CompilerIf #PB_Compiler_Debugger
+		#QSFX_DEBUG = #True
+	CompilerElse
+		#QSFX_DEBUG = #False
+	CompilerEndIf
+CompilerEndIf
+
+CompilerIf Not Defined(QSFX_DEBUG_TRACE, #PB_Constant)
+	#QSFX_DEBUG_TRACE = #False
+CompilerEndIf
+
+Enumeration
+	#QSFX_ERROR_SUCCESSFUL
+	#QSFX_ERROR_INITIALIZATION
+EndEnumeration
+
 
 ; // end region
 ; // region ...Structures...
 
+
+Structure QSFX_GLOBAL
+	initialized.i
+	error.i
+EndStructure
 
 Structure QSFX_VERSION
 	major.a
@@ -52,20 +80,84 @@ EndStructure
 
 
 ; // end region
+; // region ...Macros...
+
+
+Macro QSFX_DEBUG(__message)
+	CompilerIf #QSFX_DEBUG
+		CompilerIf #QSFX_DEBUG_TRACE
+			Debug "[" + GetFilePart(#PB_Compiler_File, #PB_FileSystem_NoExtension) + "," + #PB_Compiler_Line + "] " + __message
+			PrintN("[" + GetFilePart(#PB_Compiler_File, #PB_FileSystem_NoExtension) + "," + #PB_Compiler_Line + "] " + __message)
+		CompilerElse
+			Debug "[QSFX] " + __message
+			PrintN("[QSFX] " + __message)
+		CompilerEndIf
+	CompilerEndIf
+EndMacro
+
+
+; // end region
+; // region ...Globals...
+
+
+Global qsfx.QSFX_GLOBAL
+
+With qsfx
+	\initialized = #False
+	\error = #QSFX_ERROR_SUCCESSFUL
+EndWith
+
+
+; // end region
+; // region ...Locals...
+
+
+Procedure.i qsfx_set_error(error.i)
+	qsfx\error = error
+	ProcedureReturn #True
+EndProcedure
+
+
+; // end region
 ; // region ...Exports...
 
 
 ProcedureDLL.i qsfx_version(*version.QSFX_VERSION)
-	
 	If Not *version
 		ProcedureReturn #False
 	EndIf
-	
+
 	With *version
 		\major = #QSFX_VERSION_MAJOR
 		\minor = #QSFX_VERSION_MINOR
 	EndWith
 
+	ProcedureReturn #True
+EndProcedure
+
+ProcedureDLL.i qsfx_error()
+	ProcedureReturn qsfx\error
+EndProcedure
+
+ProcedureDLL.i qsfx_initialize()
+	CompilerIf #QSFX_DEBUG And Not #QSFX_LIBRARY
+		OpenConsole()
+	CompilerEndIf
+
+	UseOGGSoundDecoder()
+	UseFLACSoundDecoder()
+
+	If Not qsfx\initialized
+		If Not InitSound()
+			QSFX_DEBUG("Could not initialize sound devices.")
+			qsfx_set_error(#QSFX_ERROR_INITIALIZATION)
+			ProcedureReturn #False
+		EndIf
+
+		qsfx\initialized = #True
+	EndIf
+
+	QSFX_DEBUG("QSFX initialized successfully.")
 	ProcedureReturn #True
 EndProcedure
 
